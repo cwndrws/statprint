@@ -38,37 +38,31 @@ fn memStats() !MemStats {
     const reader = f.reader();
     const buf_size = 100;
     var buf: [buf_size]u8 = undefined;
-    const mem_total_line_start = "MemTotal:";
-    const mem_avail_line_start = "MemAvailable:";
-    var mem_total_val: usize = undefined;
-    var mem_total_unit: []const u8 = undefined;
-    var mem_avail_val: usize = undefined;
-    var mem_avail_unit: []const u8 = undefined;
+    const line_starts: [2][]const u8 = .{
+        "MemTotal:",
+        "MemAvailable:",
+    };
+    var stats: [line_starts.len]usize = undefined;
+
     while (true) {
         const line = try reader.readUntilDelimiterOrEof(buf[0..], '\n');
         if (line) |l| {
-            if (std.mem.startsWith(u8, l, mem_total_line_start)) {
-                const mem_total_str = std.mem.trim(u8, l[mem_total_line_start.len + 1 ..], " \t\n");
-                var split = std.mem.splitSequence(u8, mem_total_str, " ");
-                mem_total_val = try std.fmt.parseInt(usize, split.first(), 10);
-                mem_total_unit = split.next() orelse unreachable;
-                std.debug.assert(split.rest().len == 0);
-                continue;
-            }
-            if (std.mem.startsWith(u8, l, mem_avail_line_start)) {
-                const mem_avail_str = std.mem.trim(u8, l[mem_avail_line_start.len + 1 ..], " \t\n");
-                var split = std.mem.splitSequence(u8, mem_avail_str, " ");
-                mem_avail_val = try std.fmt.parseInt(usize, split.first(), 10);
-                mem_avail_unit = split.next() orelse unreachable;
-                std.debug.assert(split.rest().len == 0);
-                continue;
+            for (line_starts, 0..) |start, i| {
+                if (std.mem.startsWith(u8, l, start)) {
+                    const str_val = std.mem.trim(u8, l[start.len + 1 ..], " \n");
+                    var split = std.mem.splitSequence(u8, str_val, " ");
+                    const val = try std.fmt.parseInt(usize, split.first(), 10);
+                    const unit = split.next() orelse unreachable;
+                    std.debug.assert(split.rest().len == 0);
+                    stats[i] = val * mulitplierFromUnit(unit);
+                }
             }
         } else break;
     }
 
     return .{
-        .available = mem_avail_val * mulitplierFromUnit(mem_avail_unit),
-        .total = mem_total_val * mulitplierFromUnit(mem_total_unit),
+        .total = stats[0],
+        .available = stats[1],
     };
 }
 
